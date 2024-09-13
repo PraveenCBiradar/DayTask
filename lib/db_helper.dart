@@ -52,7 +52,7 @@ class DBHelper {
     await db.insert('users', {
       'name': name,
       'password': password,
-      'isLoggedIn': 1,  // Set user as logged in upon registration
+      'isLoggedIn': 1, // Set user as logged in upon registration
     });
   }
 
@@ -131,6 +131,40 @@ class DBHelper {
       'records',
       where: 'date = ?',
       whereArgs: [date],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> searchRecordsByDateRange(
+      String startDate, String endDate, String sortOrder) async {
+    final db = await instance.database;
+
+    final orderBy = sortOrder == 'Ascending' ? 'date ASC' : 'date DESC';
+
+    return await db.query(
+      'records',
+      where: 'date BETWEEN ? AND ?',
+      whereArgs: [startDate, endDate],
+      orderBy: orderBy,
+    );
+  }
+
+  // Delete user by id
+  Future<void> deleteUser(int id) async {
+    final db = await instance.database;
+    await db.delete(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Delete record by id
+  Future<void> deleteRecord(int id) async {
+    final db = await instance.database;
+    await db.delete(
+      'records',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 }
