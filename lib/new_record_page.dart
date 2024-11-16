@@ -17,11 +17,10 @@ class _NewRecordPageState extends State<NewRecordPage> {
 
   Future<void> _selectDate() async {
     DateTime currentDate = DateTime.now();
-    DateTime selectedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
 
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: selectedDate,
+      initialDate: currentDate,
       firstDate: DateTime(2000),
       lastDate: currentDate,
       builder: (BuildContext context, Widget? child) {
@@ -36,7 +35,7 @@ class _NewRecordPageState extends State<NewRecordPage> {
       },
     );
 
-    if (pickedDate != null && pickedDate != selectedDate) {
+    if (pickedDate != null) {
       setState(() {
         _dateController.text = DateFormat('yyyy-MM-dd').format(pickedDate);
       });
@@ -123,7 +122,7 @@ class _NewRecordPageState extends State<NewRecordPage> {
                     _buildTextField(
                       controller: _incomeController,
                       label: 'Income (₹)',
-                      icon: Icons.currency_rupee,  // Changed to rupee icon
+                      icon: Icons.currency_rupee,
                       keyboardType: TextInputType.number,
                     ),
                     SizedBox(height: 16),
