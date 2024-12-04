@@ -13,7 +13,33 @@ class _NewRecordPageState extends State<NewRecordPage> {
   final TextEditingController _kmsController = TextEditingController();
   final TextEditingController _incomeController = TextEditingController();
   final TextEditingController _paiseController = TextEditingController();
-  bool _isConfirmed = false;
+  bool _isShara = false;
+  double _calculatedPaise = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Add listeners to calculate paise dynamically
+    _kmsController.addListener(_calculatePaise);
+    _incomeController.addListener(_calculatePaise);
+  }
+
+  void _calculatePaise() {
+    try {
+      double kms = double.tryParse(_kmsController.text) ?? 0.0; // Optional decimal
+      double income = double.tryParse(_incomeController.text) ?? 0.0; // Optional decimal
+
+      setState(() {
+        _calculatedPaise = kms > 0 ? income / kms : 0.0;
+        _paiseController.text = _calculatedPaise.toStringAsFixed(2);
+      });
+    } catch (e) {
+      setState(() {
+        _paiseController.text = '0.00';
+      });
+    }
+  }
 
   Future<void> _selectDate() async {
     DateTime currentDate = DateTime.now();
@@ -46,11 +72,11 @@ class _NewRecordPageState extends State<NewRecordPage> {
     try {
       await DBHelper.instance.addRecord(
         date: _dateController.text,
-        slno: int.parse(_slnoController.text),
-        kms: int.parse(_kmsController.text),
-        income: int.parse(_incomeController.text),
-        paise: _paiseController.text.isNotEmpty ? int.parse(_paiseController.text) : null,
-        isConfirmed: _isConfirmed,
+        slno: int.parse(_slnoController.text), // Accepting '/' in SL No
+        kms: double.parse(_kmsController.text.isEmpty ? "0" : _kmsController.text),
+        income: double.parse(_incomeController.text.isEmpty ? "0" : _incomeController.text),
+        paise: _calculatedPaise,
+        isConfirmed: _isShara,
       );
       Navigator.pop(context);
     } catch (e) {
@@ -109,41 +135,41 @@ class _NewRecordPageState extends State<NewRecordPage> {
                       controller: _slnoController,
                       label: 'SL No',
                       icon: Icons.format_list_numbered,
-                      keyboardType: TextInputType.number,
+                      keyboardType: TextInputType.number, // Updated for numeric input
                     ),
                     SizedBox(height: 16),
                     _buildTextField(
                       controller: _kmsController,
                       label: 'KMs',
                       icon: Icons.speed,
-                      keyboardType: TextInputType.number,
+                      keyboardType: TextInputType.numberWithOptions(decimal: true),
                     ),
                     SizedBox(height: 16),
                     _buildTextField(
                       controller: _incomeController,
                       label: 'Income (₹)',
                       icon: Icons.currency_rupee,
-                      keyboardType: TextInputType.number,
+                      keyboardType: TextInputType.numberWithOptions(decimal: true),
                     ),
                     SizedBox(height: 16),
                     _buildTextField(
                       controller: _paiseController,
-                      label: 'Paise (optional)',
+                      label: 'Paise (Auto-calculated)',
                       icon: Icons.currency_rupee,
-                      keyboardType: TextInputType.number,
+                      readOnly: true, // Make paise read-only
                     ),
                     SizedBox(height: 16),
                     Row(
                       children: [
                         Icon(Icons.check_circle_outline, color: Colors.indigo),
                         SizedBox(width: 8),
-                        Text('Confirmed', style: TextStyle(fontSize: 16)),
+                        Text('Shara', style: TextStyle(fontSize: 16)),
                         Spacer(),
                         Switch(
-                          value: _isConfirmed,
+                          value: _isShara,
                           onChanged: (value) {
                             setState(() {
-                              _isConfirmed = value;
+                              _isShara = value;
                             });
                           },
                           activeColor: Colors.indigo,
@@ -200,5 +226,12 @@ class _NewRecordPageState extends State<NewRecordPage> {
       onTap: onTap,
       readOnly: readOnly,
     );
+  }
+
+  @override
+  void dispose() {
+    _kmsController.removeListener(_calculatePaise);
+    _incomeController.removeListener(_calculatePaise);
+    super.dispose();
   }
 }

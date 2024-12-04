@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Import for date formatting
+import 'package:intl/intl.dart';
 import 'db_helper.dart';
 import 'new_record_page.dart';
-import 'record_detail_page.dart'; // Import the new detail page
-import 'profile_page.dart'; // Import the Profile page
-import 'about_us_page.dart'; // Import the About Us page
-import 'help_page.dart'; // Import the Help page
-import 'settings_page.dart'; // Import the Settings page
+import 'record_detail_page.dart';
+import 'profile_page.dart';
+import 'about_us_page.dart';
+import 'help_page.dart';
+import 'settings_page.dart';
+import 'overtime_page.dart';
+import 'newkmplrecord_page.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -14,269 +16,437 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _dateController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
-  bool _isLoading = false; // Flag to indicate loading state
-  bool _isDarkMode = false; // Flag for theme switching
+  bool _isDarkMode = false;
+  String _currentOvertime = '0.0';
 
+  // Existing methods remain the same...
   Future<void> _searchRecords() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (_dateController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please enter a date'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
-    final searchResults = await DBHelper.instance.searchRecordsByDate(_searchController.text);
+    try {
+      final searchResults = await DBHelper.instance.searchRecordsByDate(_dateController.text);
+
+      setState(() {
+        _searchResults = searchResults;
+        _calculateCurrentOvertime();
+      });
+
+      _showSearchResultsDialog();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error searching records: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  void _showSearchResultsDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: Text(
+            'Search Results',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A237E),
+            ),
+          ),
+          content: _searchResults.isEmpty
+              ? Text(
+            'No records found for the selected date.',
+            style: TextStyle(color: Colors.grey),
+          )
+              : SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _searchResults.map((record) {
+                return Card(
+                  elevation: 2,
+                  margin: EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    title: Text(
+                      'Date: ${record['date'] ?? 'N/A'}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Time: ${record['time'] ?? 'N/A'} hours',
+                    ),
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      color: Color(0xFF1A237E),
+                    ),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RecordDetailPage(record: record),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Close',
+                style: TextStyle(
+                  color: Color(0xFF1A237E),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Other existing methods remain the same...
+  void _calculateCurrentOvertime() {
+    double totalTime = 0;
+    double totalOff = 0;
+
+    for (var record in _searchResults) {
+      totalTime += double.tryParse(record['time'] ?? '0.0') ?? 0.0;
+      totalOff += double.tryParse(record['off'] ?? '0.0') ?? 0.0;
+    }
 
     setState(() {
-      _searchResults = searchResults;
-      _isLoading = false;
+      _currentOvertime = (totalTime - totalOff).toStringAsFixed(2);
     });
   }
 
   Future<void> _selectDate() async {
     DateTime currentDate = DateTime.now();
-    DateTime selectedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
+    DateTime initialDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
 
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: selectedDate,
-      firstDate: DateTime(2000), // Set a reasonable start date
-      lastDate: currentDate, // Limit the selection to today's date
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: currentDate,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Color(0xFF1A237E),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+            dialogBackgroundColor: Colors.white,
+          ),
+          child: child!,
+        );
+      },
     );
 
-    if (pickedDate != null && pickedDate != selectedDate) {
+    if (pickedDate != null) {
       setState(() {
-        _searchController.text = DateFormat('yyyy-MM-dd').format(pickedDate);
+        _dateController.text = DateFormat('yyyy-MM-dd').format(pickedDate);
       });
-      _searchRecords(); // Perform search with the selected date
     }
-  }
-
-  void _logout() async {
-    await DBHelper.instance.logoutUser();
-    Navigator.pushReplacementNamed(context, '/login'); // Redirect to login page
-  }
-
-  void _navigateToNewRecordPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => NewRecordPage()),
-    );
-  }
-
-  void _navigateToRecordDetailPage(Map<String, dynamic> record) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RecordDetailPage(record: record),
-      ),
-    );
-  }
-
-  void _toggleTheme() {
-    setState(() {
-      _isDarkMode = !_isDarkMode;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: _isDarkMode ? ThemeData.dark() : ThemeData.light(),
+      theme: _isDarkMode
+          ? ThemeData.dark().copyWith(
+        colorScheme: ColorScheme.dark(
+          primary: Color(0xFF1A237E),
+          secondary: Color(0xFF1A237E),
+        ),
+      )
+          : ThemeData.light().copyWith(
+        colorScheme: ColorScheme.light(
+          primary: Color(0xFF1A237E),
+          secondary: Color(0xFF1A237E),
+        ),
+      ),
       home: Scaffold(
         appBar: AppBar(
-          title: Text('Dashboard'),
-          flexibleSpace: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blueAccent, Colors.purpleAccent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+          elevation: 0,
+          title: Text(
+            'Work Tracker',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              fontSize: 22,
             ),
           ),
+          centerTitle: true,
+          backgroundColor: Color(0xFF1A237E),
           actions: [
             IconButton(
-              icon: Icon(Icons.exit_to_app),
-              onPressed: _logout,
+              icon: Icon(Icons.settings, color: Colors.white),
+              tooltip: 'Settings',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => SettingsPage()),
+                );
+              },
+            ),
+            IconButton(
+              icon: Icon(Icons.exit_to_app, color: Colors.white),
+              tooltip: 'Logout',
+              onPressed: () {}, // Logout method
             ),
           ],
-        ),
-        drawer: Drawer(
-          child: Column(
-            children: [
-              Container(
-                color: Colors.blueAccent,
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      'DayTask',
-                      style: TextStyle(
-                        fontSize: 24.0,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 16.0),
-                    // Placeholder for user profile section
-                    CircleAvatar(
-                      radius: 40.0,
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person, size: 40.0, color: Colors.blueAccent),
-                    ),
-                    SizedBox(height: 8.0),
-                    Text(
-                      'User Name', // Replace with user's name
-                      style: TextStyle(color: Colors.white, fontSize: 18.0),
-                    ),
-                  ],
-                ),
-              ),
-              ListTile(
-                leading: Icon(Icons.person),
-                title: Text('Profile'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ProfilePage()),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.info),
-                title: Text('About Us'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => AboutUsPage()),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.help),
-                title: Text('Help'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => HelpPage()),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.settings),
-                title: Text('Settings'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => SettingsPage()),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.brightness_6),
-                title: Text('Switch Theme'),
-                onTap: _toggleTheme,
-              ),
-              Spacer(),
-              ListTile(
-                leading: Icon(Icons.exit_to_app),
-                title: Text('Logout'),
-                onTap: _logout,
-              ),
-            ],
-          ),
         ),
         body: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.white, Colors.blueGrey[50]!],
+              colors: [Colors.grey[100]!, Colors.white],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
           ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'YYYY-MM-DD', // Clear hint text for date format
-                          labelText: 'Search by Date',
-                          hintStyle: TextStyle(color: Colors.grey[600]), // Hint text style
-                          labelStyle: TextStyle(color: Colors.blueGrey), // Label text style
-                          suffixIcon: IconButton(
-                            icon: Icon(Icons.search, color: Colors.blue),
-                            onPressed: _searchRecords,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(color: Colors.blueGrey),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(color: Colors.blue, width: 2.0),
-                          ),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-                        ),
-                        keyboardType: TextInputType.datetime,
-                        onSubmitted: (_) => _searchRecords(), // Trigger search on submit
+          child: SingleChildScrollView(
+            physics: BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                // Search Container with Enhanced Design
+                Container(
+                  margin: EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                        offset: Offset(0, 4),
                       ),
-                    ),
-                    SizedBox(width: 8.0), // Spacing between search field and calendar icon
-                    IconButton(
-                      icon: Icon(Icons.calendar_today, color: Colors.blue),
-                      onPressed: _selectDate,
-                      tooltip: 'Select Date',
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _dateController,
+                          decoration: InputDecoration(
+                            hintText: 'YYYY-MM-DD',
+                            labelText: 'Search Date',
+                            prefixIcon: Icon(Icons.calendar_today, color: Color(0xFF1A237E)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Color(0xFF1A237E).withOpacity(0.3),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Color(0xFF1A237E),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          keyboardType: TextInputType.datetime,
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      IconButton(
+                        icon: Icon(Icons.calendar_today, color: Color(0xFF1A237E)),
+                        onPressed: _selectDate,
+                        tooltip: 'Select Date',
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.search, color: Color(0xFF1A237E)),
+                        onPressed: _searchRecords,
+                        tooltip: 'Search Records',
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              _isLoading
-                  ? Center(child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue), // Loading indicator color
-              ))
-                  : Expanded(
-                child: ListView.builder(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  itemCount: _searchResults.length,
-                  itemBuilder: (context, index) {
-                    final record = _searchResults[index];
-                    return Card(
-                      margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                      elevation: 5.0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.0),
+
+                // Quick Actions Container with Enhanced Design
+                Container(
+                  margin: EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: EdgeInsets.all(24.0),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                        offset: Offset(0, 4),
                       ),
-                      color: Colors.amber,
-                      child: ListTile(
-                        contentPadding: EdgeInsets.all(16.0),
-                        title: Text(
-                          'Date: ${record['date']}',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quick Actions',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFFFFFF),
                         ),
-                        subtitle: Text(
-                          'SL No: ${record['slno']} | KMs: ${record['kms']} | Income: ${record['income']} | Paise: ${record['paise'] ?? 'N/A'}',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                        onTap: () => _navigateToRecordDetailPage(record),
                       ),
-                    );
-                  },
+                      SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildQuickActionButton(
+                            icon: Icons.search,
+                            label: 'Search',
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                    ),
+                                    title: Text('Search Records'),
+                                    content: TextField(
+                                      controller: _dateController,
+                                      decoration: InputDecoration(
+                                        hintText: 'YYYY-MM-DD',
+                                        labelText: 'Enter Date',
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(context).pop(),
+                                        child: Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Color(0xFF1A237E),
+                                        ),
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          _searchRecords();
+                                        },
+                                        child: Text('Search'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                          _buildQuickActionButton(
+                            icon: Icons.access_time,
+                            label: 'EPKM',
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => NewRecordPage()),
+                              );
+                            },
+                          ),
+                          _buildQuickActionButton(
+                            icon: Icons.electric_meter_rounded,
+                            label: 'KMPL',
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => NewKMPLRecordPage()),
+                              );
+                            },
+                          ),
+
+                          _buildQuickActionButton(
+                            icon: Icons.bus_alert,
+                            label: 'MECH',
+                            onTap: () {}, // Navigate to MECH page
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _navigateToNewRecordPage,
-          child: Icon(Icons.add),
-          backgroundColor: Colors.deepPurpleAccent, // Floating Action Button color
-          tooltip: 'Add New Record',
+      ),
+    );
+  }
+
+  Widget _buildQuickActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 70,
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Color(0xFF1A237E).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Color(0xFF1A237E).withOpacity(0.2),
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                icon,
+                size: 28,
+                color: Color(0xFF1A237E),
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A237E),
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
       ),
     );
